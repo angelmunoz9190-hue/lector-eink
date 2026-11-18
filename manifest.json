@@ -1,10 +1,14 @@
 {
   "name": "Lector E-Ink Personal",
   "short_name": "E-Ink Reader",
+  "description": "Lector personal de libros EPUB con biblioteca local, temas claro, oscuro y sepia, y tipografías ajustables.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
+  "categories": ["books", "education", "productivity"],
+  "lang": "es",
   "background_color": "#f4f1ea",
   "theme_color": "#eae6df",
   "icons": [
