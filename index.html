@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lector E-Ink - Biblioteca Local</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#eae6df">
+    <link rel="icon" href="icon-192.png">
+    <!-- Librerías externas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500&family=Merriweather:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #f4f1ea; 
+            --text-color: #2c2c2c;
+            --accent-color: #555555;
+            --panel-bg: #eae6df;
+            --font-family: 'Merriweather', serif;
+            --font-size: 1.1rem;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #a0a0a0;
+            --panel-bg: #1e1e1e;
+        }
+
+        [data-theme="sepia"] {
+            --bg-color: #2b231d;
+            --text-color: #e3d2be;
+            --accent-color: #bfa58a;
+            --panel-bg: #382e27;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: background 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--accent-color);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .logo {
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button, label.upload-btn, select {
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            padding: 6px 12px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        button:hover, label.upload-btn:hover {
+            background-color: var(--text-color);
+            color: var(--bg-color);
+        }
+
+        select {
+            background-color: var(--bg-color);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        #library-view {
+            display: none;
+            width: 100%;
+            height: 75vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .library-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .book-card {
+            border: 1px solid var(--accent-color);
+            padding: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            background-color: var(--panel-bg);
+            transition: transform 0.2s;
+            text-align: center;
+        }
+
+        .book-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .book-card h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #viewer {
+            width: 100%;
+            height: 75vh;
+            background-color: var(--bg-color);
+            font-size: var(--font-size);
+            position: relative;
+        }
+
+        .welcome-screen {
+            text-align: center;
+            color: var(--accent-color);
+            margin-top: 15vh;
+            width: 100%;
+        }
+
+        .welcome-screen h2 {
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+
+        footer {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 12px;
+            background-color: var(--panel-bg);
+            border-top: 1px solid var(--accent-color);
+        }
+    </style>
+</head>
+<body data-theme="light">
+
+    <header>
+        <div class="logo" onclick="showLibrary()">Lector E-Ink</div>
+        <div class="controls">
+            <button onclick="showLibrary()">Mi Biblioteca</button>
+            <label class="upload-btn" for="file-input">Subir Libro</label>
+            <input type="file" id="file-input" accept=".epub,.txt,.pdf,.docx">
+            
+            <select id="toc-select" onchange="navigateToc(this.value)">
+                <option value="">Índice / Capítulos</option>
+            </select>
+
+            <select id="font-select" onchange="changeFont(this.value)">
+                <option value="'Merriweather', serif">Merriweather (Libro)</option>
+                <option value="'Inter', sans-serif">Inter (Moderna)</option>
+                <option value="'Playfair Display', serif">Playfair (Clásica)</option>
+                <option value="'Fira Code', monospace">Fira Code (Mono)</option>
+            </select>
+
+            <select id="columns-select" onchange="changeColumns(this.value)">
+                <option value="auto">2 Columnas (Doble)</option>
+                <option value="single">1 Columna (Simple)</option>
+            </select>
+
+            <button onclick="changeFontSize(-0.1)" title="Disminuir letra">A-</button>
+            <button onclick="changeFontSize(0.1)" title="Aumentar letra">A+</button>
+
+            <button id="theme-toggle" onclick="toggleTheme()">Modo: Claro</button>
+        </div>
+    </header>
+
+    <main>
+        <div id="library-view">
+            <h2>Tus Libros Guardados</h2>
+            <p style="color: var(--accent-color); margin-top: 5px;">Estantería virtual e historial de lectura local.</p>
+            <div class="library-grid" id="library-grid"></div>
+        </div>
+
+        <div id="viewer">
+            <div class="welcome-screen">
+                <h2>Tu biblioteca personal sin restricciones</h2>
+                <p>Sube un archivo o entra a "Mi Biblioteca" para leer.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <button id="prev-btn" style="display:none;" onclick="prevPage()">Anterior</button>
+        <button id="next-btn" style="display:none;" onclick="nextPage()">Siguiente</button>
+    </footer>
+
+    <script>
+        let book = null;
+        let rendition = null;
+        let currentThemeIndex = 0;
+        const themes = ['light', 'dark', 'sepia'];
+        const themeNames = { 'light': 'Claro', 'dark': 'Oscuro', 'sepia': 'Sepia' };
+        let currentFont = "'Merriweather', serif";
+        let currentFontSize = 1.1;
+        let currentSpread = "auto";
+        let currentBookId = null;
+
+        const fileInput = document.getElementById('file-input');
+        const viewer = document.getElementById('viewer');
+        const libraryView = document.getElementById('library-view');
+        const libraryGrid = document.getElementById('library-grid');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const tocSelect = document.getElementById('toc-select');
+        const columnsSelect = document.getElementById('columns-select');
+        const fontSelect = document.getElementById('font-select');
+
+        let dbLocal;
+        const request = indexedDB.open("EInkReaderLocalDB", 1);
+        request.onerror = () => console.error("Error al abrir IndexedDB");
+        request.onsuccess = (event) => {
+            dbLocal = event.target.result;
+            loadLibraryGrid();
+        };
+        request.onupgradeneeded = (event) => {
+            dbLocal = event.target.result;
+            if (!dbLocal.objectStoreNames.contains("books")) {
+                dbLocal.createObjectStore("books", { keyPath: "id", autoIncrement: true });
+            }
+        };
+
+        function saveBookToDB(name, buffer, progress = null) {
+            const transaction = dbLocal.transaction(["books"], "readwrite");
+            const store = transaction.objectStore("books");
+            const bookData = { name, buffer, progress, updatedAt: new Date().getTime() };
+            
+            const req = store.add(bookData);
+            req.onsuccess = () => {
+                loadLibraryGrid();
+                openBookFromDB(req.result);
+            };
+        }
+
+        function loadLibraryGrid() {
+            if (!dbLocal) return;
+            libraryGrid.innerHTML = '';
+            const transaction = dbLocal.transaction(["books"], "readonly");
+            const store = transaction.objectStore("books");
+            const request = store.openCursor();
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const book = cursor.value;
+                    const card = document.createElement('div');
+                    card.className = 'book-card';
+                    card.innerHTML = `<h3>📚 ${book.name}</h3><p style="font-size: 0.8rem; color: var(--accent-color); margin-top: 5px;">Guardado local</p>`;
+                    card.onclick = () => openBookFromDB(book.id, book.buffer, book.progress);
+                    libraryGrid.appendChild(card);
+                    cursor.continue();
+                } else {
+                    if (libraryGrid.innerHTML === '') {
+                        libraryGrid.innerHTML = '<p style="color: var(--accent-color);">No hay libros guardados aún.</p>';
+                    }
+                }
+            };
+        }
+
+        function showLibrary() {
+            if (rendition) rendition.destroy();
+            viewer.style.display = 'none';
+            libraryView.style.display = 'block';
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+            loadLibraryGrid();
+        }
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                saveBookToDB(file.name, event.target.result);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function openBookFromDB(id, buffer, savedProgress = null) {
+            currentBookId = id;
+            if (!buffer) {
+                const transaction = dbLocal.transaction(["books"], "readonly");
+                const store = transaction.objectStore("books");
+                const req = store.get(id);
+                req.onsuccess = () => {
+                    initEpubReader(req.value.buffer, req.value.progress);
+                };
+            } else {
+                initEpubReader(buffer, savedProgress);
+            }
+        }
+
+        function initEpubReader(buffer, savedProgress) {
+            libraryView.style.display = 'none';
+            viewer.style.display = 'block';
+            prevBtn.style.display = 'inline-block';
+            nextBtn.style.display = 'inline-block';
+            viewer.innerHTML = '<div class="welcome-screen"><h2>Cargando libro...</h2></div>';
+            
+            book = ePub(buffer);
+            renderBook(savedProgress);
+
+            book.loaded.navigation.then(toc => {
+                tocSelect.innerHTML = '<option value="">Índice / Capítulos</option>';
+                toc.forEach(chapter => {
+                    const option = document.createElement('option');
+                    option.value = chapter.href;
+                    option.textContent = chapter.label.trim();
+                    tocSelect.appendChild(option);
+                });
+            });
+        }
+
+        function renderBook(targetLocation = null) {
+            if (!book) return;
+            viewer.innerHTML = '';
+            let spreadSetting = currentSpread === 'single' ? false : 'auto';
+
+            rendition = book.renderTo("viewer", {
+                width: "100%",
+                height: "100%",
+                spread: spreadSetting
+            });
+
+            rendition.display(targetLocation || undefined);
+            applyCurrentStyles();
+
+            rendition.on("relocated", (location) => {
+                saveProgress(location.start.cfi);
+            });
+
+            let touchStartX = 0;
+            let touchEndX = 0;
+            rendition.on("touchstart", (event) => {
+                if (event.changedTouches && event.changedTouches.length > 0) {
+                    touchStartX = event.changedTouches[0].clientX;
+                }
+            });
+            rendition.on("touchend", (event) => {
+                if (event.changedTouches && event.changedTouches.length > 0) {
+                    touchEndX = event.changedTouches[0].clientX;
+                    let diff = touchStartX - touchEndX;
+                    if (Math.abs(diff) > 50) {
+                        if (diff > 0) nextPage();
+                        else prevPage();
+                    }
+                }
+            });
+        }
+
+        function saveProgress(cfi) {
+            if (!currentBookId || !dbLocal) return;
+            const transaction = dbLocal.transaction(["books"], "readwrite");
+            const store = transaction.objectStore("books");
+            store.get(currentBookId).onsuccess = (e) => {
+                let data = e.target.result;
+                if (data) {
+                    data.progress = cfi;
+                    data.updatedAt = new Date().getTime();
+                    store.put(data);
+                }
+            };
+        }
+
+        function navigateToc(href) {
+            if (!href || !rendition) return;
+            rendition.display(href);
+        }
+
+        function changeColumns(value) {
+            currentSpread = value;
+            if (book && rendition) {
+                const loc = rendition.currentLocation();
+                renderBook(loc ? loc.start.cfi : null);
+            }
+        }
+
+        function prevPage() { if (rendition) rendition.prev(); }
+        function nextPage() { if (rendition) rendition.next(); }
+
+        document.addEventListener('keydown', (e) => {
+            if (!rendition) return;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevPage();
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextPage();
+        });
+
+        function toggleTheme() {
+            currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+            const theme = themes[currentThemeIndex];
+            document.body.setAttribute('data-theme', theme);
+            document.getElementById('theme-toggle').innerText = `Modo: ${themeNames[theme]}`;
+            applyCurrentStyles();
+        }
+
+        function changeFont(fontFamily) {
+            currentFont = fontFamily;
+            applyCurrentStyles();
+        }
+
+        function changeFontSize(delta) {
+            currentFontSize = Math.min(Math.max(0.8, currentFontSize + delta), 2.0);
+            document.documentElement.style.setProperty('--font-size', `${currentFontSize}rem`);
+            applyCurrentStyles();
+        }
+
+        function applyCurrentStyles() {
+            if (!rendition) return;
+            const themeName = themes[currentThemeIndex];
+            const colors = {
+                light: { bg: '#f4f1ea', text: '#2c2c2c' },
+                dark:  { bg: '#121212', text: '#e0e0e0' },
+                sepia: { bg: '#2b231d', text: '#e3d2be' }
+            }[themeName];
+            rendition.themes.default({
+                'html': { 'background': colors.bg + ' !important' },
+                'body': {
+                    'background': colors.bg + ' !important',
+                    'color': colors.text + ' !important',
+                    'font-family': currentFont + ' !important',
+                    'font-size': currentFontSize + 'rem !important',
+                    'line-height': '1.6 !important'
+                },
+                'p, div, span, li, h1, h2, h3, h4, h5, h6': {
+                    'color': colors.text + ' !important',
+                    'font-family': currentFont + ' !important'
+                }
+            });
+            rendition.themes.fontSize((currentFontSize * 100) + '%');
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.error));
+        }
+    </script>
+</body>
+</html>
